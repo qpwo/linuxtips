@@ -1,0 +1,100 @@
+001 macos performance guide for apple silicon and darwin: use native mechanisms, not linux cargo cults.
+002 use mach_absolute_time for monotonic hot-path timing.
+003 do not use gettimeofday for measuring elapsed time.
+004 use clock_gettime_nsec_np when readability matters more than raw speed.
+005 do not compare wall-clock timestamps for latency measurement.
+006 use sysctlbyname inside programs for hardware and kernel facts.
+007 do not spawn sysctl in a loop unless you are writing a shell report.
+008 use posix_spawn for simple child startup on darwin.
+009 do not fork huge processes just to exec another binary.
+010 use kqueue as the default scalable event interface.
+011 do not build polling loops around usleep and stat.
+012 use EVFILT_USER for cheap explicit wakeups.
+013 do not use pipes as fake eventfd doorbells on macos.
+014 use EVFILT_VNODE for file change notifications.
+015 do not repeatedly stat files waiting for size or mtime changes.
+016 use EVFILT_TIMER for accurate kernel timer delivery.
+017 do not trust usleep for tight periodic scheduling.
+018 use dispatch queues for app-level parallel work.
+019 do not hand-roll worker pools before measuring dispatch_apply.
+020 use dispatch_apply for simple chunked CPU work.
+021 do not assume one pthread per task is a scheduler strategy.
+022 use QoS classes to express work importance.
+023 do not pretend performance cores and efficiency cores are identical.
+024 use QOS_CLASS_USER_INITIATED for interactive heavy work.
+025 do not run urgent work at background QoS and then blame the machine.
+026 use background QoS for indexing, cleanup, sync, and speculative work.
+027 do not steal p-cores for garbage users do not need now.
+028 use os_unfair_lock for short low-level darwin critical sections.
+029 do not use pthread_mutex as reflexive muscle memory in hot locks.
+030 use atomics for counters and flags that do not need blocking.
+031 do not put a kernel wait on a value that could be solved by one atomic.
+032 use dispatch_semaphore for semaphore-shaped local coordination.
+033 do not use pipe bytes as tokens inside one process.
+034 use kqueue, dispatch, or condition variables for waiting.
+035 do not spin unless the wait is provably shorter than parking.
+036 use APFS clonefile for local copy-on-write clones.
+037 do not read and rewrite giant files when metadata cloning is enough.
+038 use copyfile when you need macos metadata preserved.
+039 do not assume cp-like content copying preserves the resource story.
+040 use sendfile for file-to-socket transfer.
+041 do not copy file bytes through userspace just to send them to TCP.
+042 use SO_NOSIGPIPE on sockets.
+043 do not globally ignore SIGPIPE in a library or shared process.
+044 use F_NOCACHE for large one-pass file streaming.
+045 do not poison the unified file cache with data you will never reread.
+046 use F_RDADVISE when you know sequential reads are coming.
+047 do not rely on random page-cache luck for predictable I/O.
+048 use APFS and darwin fcntl knobs when the filesystem is part of performance.
+049 do not port linux io_uring, epoll, eventfd, futex, pidfd, or AF_XDP ideas blindly.
+050 use mmap for large read-mostly data only when its fault behavior helps.
+051 do not mmap because it looks lower level than read.
+052 use MADV_FREE for discardable anonymous memory.
+053 do not memset huge dead buffers just to make yourself feel clean.
+054 use malloc_good_size when buffer sizes repeat or feed allocator hot paths.
+055 do not request awkward sizes and then wonder where fragmentation came from.
+056 use malloc_size only for allocator inspection and diagnostics.
+057 do not build correctness on actual allocation size.
+058 use arc4random_buf for random bytes.
+059 do not open and drain /dev/urandom manually in normal macos code.
+060 use libproc for process facts.
+061 do not shell out to ps from a program that already has the pid.
+062 use proc_pidpath when you need the executable path.
+063 do not parse ps output unless the user explicitly asked for a report.
+064 use mach vm APIs when you need mach semantics.
+065 do not expect every old mach flag to work on apple silicon.
+066 use mmap as the boring fallback when mach allocation flags fail.
+067 do not hide unsupported kernel results; print the real mach_error_string.
+068 use /usr/bin/time -lp on macos.
+069 do not use GNU time -f unless gtime is actually installed.
+070 use Apple clang defaults unless you have evidence a flag helps.
+071 do not paste linux gcc flags into darwin builds.
+072 use -fblocks when compiling C that calls dispatch blocks.
+073 do not fight the block ABI if you use libdispatch.
+074 use 16 KB page assumptions on current apple silicon when page math matters.
+075 do not bake in 4 KB page assumptions from linux x86.
+076 use 128 byte cacheline awareness for false-sharing-sensitive structs here.
+077 do not assume 64 byte cache lines on this M4 Pro.
+078 use hw.perflevel sysctls to learn p-core and e-core counts.
+079 do not infer topology from hw.ncpu alone.
+080 use measured cycles, instructions, faults, and context switches together.
+081 do not worship wall time from one noisy laptop run.
+082 use oldway/newway pairs to teach the shape of an optimization.
+083 do not claim a benchmark proves universal truth.
+084 use small executable C probes for kernel and libc surfaces.
+085 do not write placeholder probes that cannot compile and run.
+086 use exact errno and mach error output.
+087 do not squash failure into "failed" with no object and no cause.
+088 use native darwin APIs when they remove syscalls, copies, polling, or shellouts.
+089 do not use native APIs just because they look exotic.
+090 use POSIX when it is already the right abstraction.
+091 do not replace boring correct code with clever platform code for no gain.
+092 use kqueue for fd, vnode, signal, timer, process, and user event unification.
+093 do not mix five waiting mechanisms in one small program.
+094 use dispatch for high-level concurrency and kqueue for low-level readiness.
+095 do not confuse those layers.
+096 use APFS copy-on-write features for snapshots, caches, and local duplication.
+097 do not copy bytes when identity, metadata, and CoW semantics are the real operation.
+098 use QoS, cache policy, and file hints to tell the kernel intent.
+099 do not expect the kernel to guess policy from generic POSIX calls.
+100 use macos like macos: mach, kqueue, dispatch, APFS, libproc, sysctl, and measured evidence.
