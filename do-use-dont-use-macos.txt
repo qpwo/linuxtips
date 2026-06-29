@@ -1,100 +1,100 @@
-001 macos performance guide for apple silicon and darwin: use native mechanisms, not linux cargo cults.
-002 use mach_absolute_time for monotonic hot-path timing.
-003 do not use gettimeofday for measuring elapsed time.
-004 use clock_gettime_nsec_np when readability matters more than raw speed.
-005 do not compare wall-clock timestamps for latency measurement.
-006 use sysctlbyname inside programs for hardware and kernel facts.
-007 do not spawn sysctl in a loop unless you are writing a shell report.
-008 use posix_spawn for simple child startup on darwin.
-009 do not fork huge processes just to exec another binary.
-010 use kqueue as the default scalable event interface.
-011 do not build polling loops around usleep and stat.
-012 use EVFILT_USER for cheap explicit wakeups.
-013 do not use pipes as fake eventfd doorbells on macos.
-014 use EVFILT_VNODE for file change notifications.
-015 do not repeatedly stat files waiting for size or mtime changes.
-016 use EVFILT_TIMER for accurate kernel timer delivery.
-017 do not trust usleep for tight periodic scheduling.
-018 use dispatch queues for app-level parallel work.
-019 do not hand-roll worker pools before measuring dispatch_apply.
-020 use dispatch_apply for simple chunked CPU work.
-021 do not assume one pthread per task is a scheduler strategy.
-022 use QoS classes to express work importance.
-023 do not pretend performance cores and efficiency cores are identical.
-024 use QOS_CLASS_USER_INITIATED for interactive heavy work.
-025 do not run urgent work at background QoS and then blame the machine.
-026 use background QoS for indexing, cleanup, sync, and speculative work.
-027 do not steal p-cores for garbage users do not need now.
-028 use os_unfair_lock for short low-level darwin critical sections.
-029 do not use pthread_mutex as reflexive muscle memory in hot locks.
-030 use atomics for counters and flags that do not need blocking.
-031 do not put a kernel wait on a value that could be solved by one atomic.
-032 use dispatch_semaphore for semaphore-shaped local coordination.
-033 do not use pipe bytes as tokens inside one process.
-034 use kqueue, dispatch, or condition variables for waiting.
-035 do not spin unless the wait is provably shorter than parking.
-036 use APFS clonefile for local copy-on-write clones.
-037 do not read and rewrite giant files when metadata cloning is enough.
-038 use copyfile when you need macos metadata preserved.
-039 do not assume cp-like content copying preserves the resource story.
-040 use sendfile for file-to-socket transfer.
-041 do not copy file bytes through userspace just to send them to TCP.
-042 use SO_NOSIGPIPE on sockets.
-043 do not globally ignore SIGPIPE in a library or shared process.
-044 use F_NOCACHE for large one-pass file streaming.
-045 do not poison the unified file cache with data you will never reread.
-046 use F_RDADVISE when you know sequential reads are coming.
-047 do not rely on random page-cache luck for predictable I/O.
-048 use APFS and darwin fcntl knobs when the filesystem is part of performance.
-049 do not port linux io_uring, epoll, eventfd, futex, pidfd, or AF_XDP ideas blindly.
-050 use mmap for large read-mostly data only when its fault behavior helps.
-051 do not mmap because it looks lower level than read.
-052 use MADV_FREE for discardable anonymous memory.
-053 do not memset huge dead buffers just to make yourself feel clean.
-054 use malloc_good_size when buffer sizes repeat or feed allocator hot paths.
-055 do not request awkward sizes and then wonder where fragmentation came from.
-056 use malloc_size only for allocator inspection and diagnostics.
-057 do not build correctness on actual allocation size.
-058 use arc4random_buf for random bytes.
-059 do not open and drain /dev/urandom manually in normal macos code.
-060 use libproc for process facts.
-061 do not shell out to ps from a program that already has the pid.
-062 use proc_pidpath when you need the executable path.
-063 do not parse ps output unless the user explicitly asked for a report.
-064 use mach vm APIs when you need mach semantics.
-065 do not expect every old mach flag to work on apple silicon.
-066 use mmap as the boring fallback when mach allocation flags fail.
-067 do not hide unsupported kernel results; print the real mach_error_string.
-068 use /usr/bin/time -lp on macos.
-069 do not use GNU time -f unless gtime is actually installed.
-070 use Apple clang defaults unless you have evidence a flag helps.
-071 do not paste linux gcc flags into darwin builds.
-072 use -fblocks when compiling C that calls dispatch blocks.
-073 do not fight the block ABI if you use libdispatch.
-074 use 16 KB page assumptions on current apple silicon when page math matters.
-075 do not bake in 4 KB page assumptions from linux x86.
-076 use 128 byte cacheline awareness for false-sharing-sensitive structs here.
-077 do not assume 64 byte cache lines on this M4 Pro.
-078 use hw.perflevel sysctls to learn p-core and e-core counts.
-079 do not infer topology from hw.ncpu alone.
-080 use measured cycles, instructions, faults, and context switches together.
-081 do not worship wall time from one noisy laptop run.
-082 use oldway/newway pairs to teach the shape of an optimization.
-083 do not claim a benchmark proves universal truth.
-084 use small executable C probes for kernel and libc surfaces.
-085 do not write placeholder probes that cannot compile and run.
-086 use exact errno and mach error output.
-087 do not squash failure into "failed" with no object and no cause.
-088 use native darwin APIs when they remove syscalls, copies, polling, or shellouts.
-089 do not use native APIs just because they look exotic.
-090 use POSIX when it is already the right abstraction.
-091 do not replace boring correct code with clever platform code for no gain.
-092 use kqueue for fd, vnode, signal, timer, process, and user event unification.
-093 do not mix five waiting mechanisms in one small program.
-094 use dispatch for high-level concurrency and kqueue for low-level readiness.
-095 do not confuse those layers.
-096 use APFS copy-on-write features for snapshots, caches, and local duplication.
-097 do not copy bytes when identity, metadata, and CoW semantics are the real operation.
-098 use QoS, cache policy, and file hints to tell the kernel intent.
-099 do not expect the kernel to guess policy from generic POSIX calls.
-100 use macos like macos: mach, kqueue, dispatch, APFS, libproc, sysctl, and measured evidence.
+001 observed target: macos 15.7.3, darwin 24.6.0, arm64, apple clang 17.0.0.
+002 hardware: m4 pro, 14 logical cpus, 10 performance cores, 4 efficiency cores.
+003 memory: 51539607552 bytes total, 16384 byte pages, 128 byte cache lines.
+004 timing old: 500000 gettimeofday calls took real 0.15s and 26470155 cycles.
+005 timing new: 500000 mach_absolute_time calls reported 2141666ns and 15430729 cycles.
+006 rule: use mach_absolute_time for elapsed time; it used about 2.5x fewer instructions here.
+007 sysctl old: 40 spawned sysctl commands took real 0.31s.
+008 sysctl new: 200000 sysctlbyname calls took real 0.21s.
+009 rule: spawned sysctl was about 7.75ms per query; sysctlbyname was about 1.05us per query.
+010 sysctl old paid 27143 page reclaims and 201 faults just to read hw.ncpu 40 times.
+011 sysctl new confirmed ncpu=14, pcores=10, ecores=4 without process churn.
+012 process start old: 120 fork+exec true runs took real 0.29s.
+013 process start new: 120 posix_spawn true runs took real 0.24s.
+014 rule: posix_spawn saved about 17 percent wall time and 11121 page reclaims here.
+015 wake old: usleep polling saw 83 wakeups before a 100ms flag changed.
+016 wake new: kqueue EVFILT_USER delivered 1 event for the same notification.
+017 rule: 1 event beats 83 polls because the kernel owns the sleep, not your loop.
+018 file watch old: stat polling needed 84 polls to see a 1 byte file become 7 bytes.
+019 file watch new: EVFILT_VNODE produced 1 event with fflags=0x6.
+020 rule: file-change code should wait on vnode events, not burn 84 stats.
+021 semaphore old: 50000 pipe roundtrips retired 281223042 instructions.
+022 semaphore new: 50000 dispatch_semaphore roundtrips retired 13422556 instructions.
+023 semaphore result: dispatch used about 21x fewer instructions and 12x fewer cycles.
+024 rule: do not use pipe bytes as in-process tokens on macos.
+025 lock old: 14 pthread_mutex workers did 2800000 increments in 887929972 cycles.
+026 lock new: os_unfair_lock did the same 2800000 increments in 560830506 cycles.
+027 lock result: os_unfair_lock used 1.6x fewer cycles and 12.6x fewer involuntary context switches.
+028 rule: use os_unfair_lock for tiny darwin-only critical sections.
+029 topology: the test box has 10 p cores and 4 e cores, so qos is a scheduling input.
+030 qos new: QOS_CLASS_USER_INITIATED showed first_qos=25 on 14 worker threads.
+031 rule: qos is not magic speed by itself; it is a promise to the scheduler.
+032 timer old: 25 usleep calls at 10ms expected 250000000ns and elapsed 307889541ns.
+033 timer old drift: 57889541ns late, about 57.9ms.
+034 timer new: 25 kqueue timer events elapsed 250785916ns.
+035 timer new drift: 785916ns late, about 0.786ms.
+036 timer result: kqueue timer drift was about 74x smaller.
+037 rule: use EVFILT_TIMER for cadence; use usleep for crude naps only.
+038 copy old: read/write copied 16777216 bytes and took real 0.17s in this run.
+039 copy new: clonefile made a 16777216 byte apfs clone and took real 0.09s.
+040 rule: clonefile changes metadata; read/write burns memory bandwidth.
+041 clone rule: clonefile is O(1) until one side writes and apfs copy-on-write splits blocks.
+042 send old: userspace copied 4194304 file bytes to tcp.
+043 send new: sendfile moved the same 4194304 bytes with result=0 and errno=none.
+044 send result: cycles moved from 14688784 to 13647314 in this small loopback run.
+045 rule: sendfile matters more when payloads are large and cache pollution is expensive.
+046 cache old: default cached read consumed 16777216 bytes and potentially polluted cache.
+047 cache new: F_NOCACHE read the same 16777216 bytes with result=0.
+048 rule: F_NOCACHE is about protecting future cache, not winning every microbench.
+049 readahead old: blind sequential read consumed 16777216 bytes.
+050 readahead new: F_RDADVISE announced a 16777216 byte sequential read.
+051 rule: F_RDADVISE is a kernel hint; it is insurance against storage latency.
+052 memory old: memset cleanup touched 64MiB and forced the bytes to zero now.
+053 memory new: MADV_FREE marked 64MiB recyclable with result=0.
+054 rule: MADV_FREE says reuse these pages if pressure arrives; it is not memset.
+055 vm old: mmap allocated and touched 2MiB successfully.
+056 vm new: vm_allocate with superpage flag 0x20001 returned invalid argument on this machine.
+057 rule: probe mach flags and keep a boring mmap fallback.
+058 sigpipe old: global SIGPIPE ignore converted write to errno=Broken pipe.
+059 sigpipe new: SO_NOSIGPIPE did the same per socket with setsockopt=0.
+060 rule: libraries must not change process-wide signal policy to fix 1 socket.
+061 process info old: ps subprocess took real 0.09s and caused 835 page reclaims.
+062 process info new: proc_pidpath returned a 72 byte path in-process.
+063 process info result: libproc cut page reclaims from 835 to 273 and faults from 6 to 1.
+064 rule: ask libproc for pid facts; do not parse ps unless you are making a report.
+065 random old: reading 1MiB from /dev/urandom retired 32064969 instructions.
+066 random new: arc4random_buf generated 1MiB with 19586739 instructions.
+067 random result: arc4random_buf used about 1.6x fewer instructions and 2x fewer cycles.
+068 rule: use arc4random_buf for normal random bytes on macos.
+069 malloc old: malloc(1000003) returned usable size 1015808.
+070 malloc overhead: that size class had 15805 spare bytes, about 1.58 percent.
+071 malloc new: malloc_good_size(1000003) reported 1015808 before allocation.
+072 rule: use malloc_good_size when you reuse buffer sizes and want allocator-aligned buckets.
+073 parallel old: 56 serial chunks took real 0.20s.
+074 parallel new: dispatch_apply over global USER_INITIATED queue took real 0.09s.
+075 parallel result: dispatch_apply was about 2.2x faster wall time on 14 cpus.
+076 rule: dispatch_apply is the first thing to try for embarrassingly parallel loops.
+077 page rule: design page math around 16KiB pages here, not linux x86 4KiB folklore.
+078 cacheline rule: pad false-sharing-sensitive counters for 128 byte lines here.
+079 cpu rule: 14 logical cpus are 14 physical cpus on this m4 pro; no smt assumption.
+080 scheduler rule: 10P+4E means latency work and throughput work should not look identical.
+081 benchmark rule: compare cycles, instructions, faults, and context switches; not just real time.
+082 noise rule: treat 0.08s vs 0.09s as noise unless counters also move.
+083 syscall rule: every subprocess and polling loop is a tax; quantify it in page reclaims and csw.
+084 kernel-event rule: kqueue turned 83 or 84 polls into 1 event in two tests.
+085 native rule: darwin wins were mach, kqueue, dispatch, apfs, libproc, and sysctl.
+086 anti-rule: linux wins like io_uring, futex, eventfd, epoll, pidfd, and AF_XDP are not macos APIs.
+087 portability rule: use posix for portability, but do not call it performance engineering.
+088 correctness rule: when a native probe says invalid argument, keep the error visible.
+089 errno rule: print errno=none for 0; Undefined error: 0 is useless noise.
+090 metrics rule: include object counts: 500000 calls, 50000 roundtrips, 2800000 increments.
+091 teaching rule: oldway/newway pairs beat vague advice because they put a number on the claim.
+092 file rule: 16MiB is enough to show shape, not enough to prove storage throughput.
+093 network rule: 4MiB loopback tcp sendfile mostly proves API shape, not nic performance.
+094 lock rule: a 14-thread counter is a contention stress test, not a whole app model.
+095 timer rule: 250ms total was enough to expose 57.9ms usleep drift.
+096 memory rule: 64MiB was enough to show cleanup semantics, not memory-pressure reclamation.
+097 random rule: 1MiB was enough to show arc4random_buf avoids manual fd handling.
+098 process rule: 120 child starts was enough to see posix_spawn beat fork+exec.
+099 design rule: use the number that matches the bottleneck: ns, cycles, instructions, faults, or bytes.
+100 final rule: if there is no measured number, it is probably just vibes and should not go in this guide.
