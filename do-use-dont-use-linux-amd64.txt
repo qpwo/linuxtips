@@ -1,0 +1,100 @@
+001 DO: Treat Linux amd64 speed as bytes moved first, syscalls second, instructions third.
+002 NUMBERS: L1 hit ~1 ns, L3 hit ~10-40 ns, local DRAM ~70-120 ns, remote NUMA DRAM ~120-250 ns.
+003 NUMBERS: A syscall is often ~100-500 ns hot, but page faults, blocking, and security hooks can make it much worse.
+004 NUMBERS: A 4 KiB minor page fault is often ~1-5 us; a major fault is storage latency and can be milliseconds.
+005 DONT: Optimize arithmetic before checking whether you are just bouncing cache lines between cores.
+006 DO: Put hot per-thread counters on separate cache lines, usually 64 bytes on amd64.
+007 NUMBERS: A contended atomic can fall from billions/sec to millions/sec when many cores fight one line.
+008 USE: memory_order_relaxed for counters only when no ordering decision depends on the value.
+009 DONT: Use volatile for synchronization; volatile is not a memory model.
+010 DO: Use C11 atomics for state and futex only for parking sleepers.
+011 NUMBERS: In ./linuxtips.sh, spin-wait burned ~0.19 user seconds for a 0.20 second wait.
+012 NUMBERS: The futex version slept for the same 0.20 second wait with ~0.00 user seconds.
+013 USE: FUTEX_WAIT only after checking the expected atomic value.
+014 USE: FUTEX_WAKE after publishing the new state with the right atomic ordering.
+015 DONT: Build your queue out of futex calls; build the queue in memory and futex only on empty/full.
+016 DO: Use eventfd as an epollable doorbell for shared memory queues.
+017 NUMBERS: In ./linuxtips.sh, 50000 pipe doorbells took ~0.04 sec; eventfd took ~0.02 sec.
+018 DONT: Put the payload in eventfd; put payloads in shared memory and ring eventfd once.
+019 DO: Use pipe/socket only when byte stream semantics are what you actually want.
+020 USE: memfd_create for anonymous shared memory with fd lifetime.
+021 USE: memfd seals when peers must not shrink, grow, write, or reseal the backing object.
+022 NUMBERS: A sealed memfd grow attempt failed immediately with EPERM in ./linuxtips.sh.
+023 DONT: Share raw pointers between processes; share fd plus offset plus length plus version.
+024 DO: Use MAP_FIXED_NOREPLACE when exact virtual address placement must not clobber old mappings.
+025 NUMBERS: MAP_FIXED silently replaced a live page in ./linuxtips.sh; MAP_FIXED_NOREPLACE returned EEXIST.
+026 DONT: Use MAP_FIXED unless destroying the old VMA is exactly the intended operation.
+027 DO: Treat virtual address space as a concurrent data structure.
+028 USE: mmap reservations for arenas, JIT heaps, shared memory windows, and sparse virtual heaps.
+029 DO: Move page fault cost out of the hot path when latency matters.
+030 USE: MADV_POPULATE_READ or MADV_POPULATE_WRITE to prefault ranges deliberately.
+031 NUMBERS: In ./linuxtips.sh, manual 16 MiB page touch was ~0.007 sec; prefault then touch was ~0.006 + ~0.00003 sec.
+032 USE: MLOCK_ONFAULT when sparse future pages should become locked only after first touch.
+033 DONT: mlock a giant sparse range eagerly unless you want memory pressure and failure surprises.
+034 DO: Try MADV_COLLAPSE or huge page policy only after measuring TLB pressure.
+035 NUMBERS: 2 MiB huge pages replace 512 normal 4 KiB PTEs, often cutting TLB misses on big hot arrays.
+036 DONT: Force huge pages everywhere; they can waste memory and increase latency under fragmentation.
+037 DO: Make NUMA placement part of allocator policy on multi-socket amd64 boxes.
+038 NUMBERS: Local DRAM can be 1.3x-2x faster than remote NUMA DRAM for bandwidth-heavy code.
+039 USE: sched_setaffinity, mbind, move_pages, and /proc/pid/numa_maps to prove placement.
+040 NUMBERS: ./linuxtips.sh bound memory to node0 and move_pages reported first_page_node=0.
+041 DONT: Allocate everything on the startup thread and then run workers across all sockets.
+042 DO: Align CPU, memory, NIC queue, interrupt, and GPU locality when topology matters.
+043 USE: SO_INCOMING_CPU and SO_INCOMING_NAPI_ID to observe socket receive locality.
+044 NUMBERS: ./linuxtips.sh set SO_INCOMING_CPU successfully and read SO_INCOMING_NAPI_ID successfully.
+045 DONT: Assume Linux scheduler locality is perfect; verify it.
+046 DO: Batch datagrams with sendmmsg and recvmmsg before adopting heavier frameworks.
+047 NUMBERS: ./linuxtips.sh sent 20000 datagrams with 20000 send calls oldway.
+048 NUMBERS: ./linuxtips.sh sent the same 20000 datagrams with 625 sendmmsg calls newway.
+049 NUMBERS: That is a 32x syscall count reduction before touching io_uring or AF_XDP.
+050 USE: writev and readv for scatter/gather when buffers are already split.
+051 USE: splice, sendfile, and copy_file_range when the kernel can move file/socket data without user bounce buffers.
+052 DONT: memcpy through user space just because the simple example did it.
+053 DO: Use io_uring when you need shared submission/completion rings, batching, links, or multishot I/O.
+054 NUMBERS: ./linuxtips.sh did 200000 getpid syscalls oldway in ~0.03 sec.
+055 NUMBERS: ./linuxtips.sh submitted 4096 io_uring NOPs in batches and completed all of them in ~0.00 sec reported time.
+056 USE: registered buffers and registered files when repeated lookup/pinning dominates.
+057 DONT: Wrap one blocking operation in io_uring and call it architecture.
+058 DO: Keep io_uring ownership simple: often one ring per worker, core, or queue.
+059 DONT: Free or mutate registered buffers until CQEs prove the kernel is done.
+060 DO: Use AF_XDP for packet engines that need mmaped NIC-facing rings.
+061 NUMBERS: AF_XDP can reach tens of Mpps on capable NICs; normal sockets often fall over far earlier.
+062 DONT: Expect AF_XDP without privileges, XDP setup, driver support, UMEM, and queue binding.
+063 DO: Use AF_PACKET TPACKET_V3 when capture needs mmap rings but AF_XDP is too much.
+064 USE: PACKET_FANOUT to shard capture across worker sockets.
+065 NUMBERS: A recvfrom-per-packet capture loop can waste one syscall per packet; mmap rings amortize by blocks.
+066 DONT: Build a high-rate packet engine around one raw socket recv loop.
+067 DO: Use SO_REUSEPORT for scalable listeners.
+068 USE: SO_ATTACH_REUSEPORT_CBPF or SO_ATTACH_REUSEPORT_EBPF when default hashing is not policy enough.
+069 NUMBERS: ./linuxtips.sh default reuseport split 200 packets about 95/105.
+070 NUMBERS: ./linuxtips.sh reuseport CBPF forced all 200 packets to socket0.
+071 DONT: Put one acceptor in front of many workers unless you want that acceptor to be the bottleneck.
+072 DO: Use BPF SOCKMAP only when in-kernel TCP stream redirection actually matches the product.
+073 NUMBERS: Avoiding proxy read/write can remove two wakeups and two data copies per forwarded chunk.
+074 DONT: Reach for BPF when reuseport, batching, or io_uring already solves the measured bottleneck.
+075 DO: Treat RDMA as a different transport, not faster sockets.
+076 USE: pre-registered memory regions, queue pairs, completion queues, and preposted receives.
+077 NUMBERS: RDMA can do single-digit microsecond latency and 100+ Gbit/s, but setup and memory registration matter.
+078 DONT: Register/deregister RDMA memory in the hot path.
+079 DO: Use kTLS when TLS bulk transfer blocks zero-copy file-to-socket paths.
+080 NUMBERS: kTLS can avoid userspace record-copy/encrypt loops for large sends when cipher and kernel support line up.
+081 DONT: Assume kTLS helps tiny messages or unsupported TLS features.
+082 DO: Track MSG_ZEROCOPY completions if payloads are large enough to justify pinned-page lifetime complexity.
+083 NUMBERS: MSG_ZEROCOPY often starts making sense around tens of KiB per send, not 64 byte messages.
+084 DONT: Think zero-copy means free; it trades copies for pinning, accounting, and completion handling.
+085 DO: Watch Device Memory TCP for GPU and accelerator receive paths.
+086 NUMBERS: Host RAM bounce of 100 Gbit/s traffic is 12.5 GB/s of memory bandwidth before your app does useful work.
+087 USE: dma-buf and capable NIC/device support when network bytes should land in device memory.
+088 DONT: Promise devmem TCP portability; kernel, NIC, driver, queue setup, and device memory exporter all matter.
+089 DO: Use dma-buf fds as shareable buffer objects across GPU, display, camera, NIC, and DMA users.
+090 USE: dma-buf heaps for user-allocated DMA-capable buffers when permissions allow.
+091 DONT: mmap device buffers to the CPU unless CPU access is needed and synchronization is correct.
+092 DO: Use explicit fences, sync_file, DRM syncobj, eventfd, or subsystem fences for device sharing.
+093 DONT: Hope device ordering and CPU cache coherency are correct without the required sync protocol.
+094 DO: Use process_vm_readv/writev for occasional large same-host cross-process copies.
+095 NUMBERS: ./linuxtips.sh copied 4 MiB by pipe and by process_vm_readv; process_vm needed far fewer context switches.
+096 USE: shared memory for persistent high-frequency IPC; use process_vm for snapshots and bulk one-shot transfer.
+097 DO: Use userfaultfd for lazy paging, dirty tracking, migration, and snapshot barriers when you can own fault latency.
+098 DONT: Put userfaultfd casually in the hot path; the handler becomes part of memory management.
+099 DO: Feature-probe every advanced Linux trick at compile time and runtime, then keep a boring fallback.
+100 DONT: Ship a performance claim without numbers from your kernel, your libc, your CPU, your NIC, and your workload.
